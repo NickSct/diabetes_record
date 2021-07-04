@@ -6,7 +6,7 @@ library(lubridate)
 library(dplyr)
 
 saveData <- function(data) {
-    unlink("./data/*")
+    unlink("./data/old_data.csv")
     write.csv(data,file = "data/old_data.csv", row.names = FALSE)
     #save(data, file = "data/old_data.Rdata")
 }
@@ -42,7 +42,7 @@ ui <- fluidPage(
             actionButton("go", "Add measurement")
         ),
         mainPanel( 
-            verbatimTextOutput("date"),
+            tableOutput("date"),
             plotOutput("glucose_graph"),
             tableOutput("statistics")
         ))
@@ -52,11 +52,11 @@ ui <- fluidPage(
 server <- function(input, output) {
     filedata <- reactive({
         inFile <- input$file 
-        # if (is.null(inFile) & file.exists("./data/old_data.Rdata")) {
-        #     load("data/old_data.Rdata")
-        #     colnames(data)[3] <- "Glucose"
-        #     return(data)
-        # }
+        if (is.null(inFile) & file.exists("./data/old_data.csv")) {
+            dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))
+            colnames(dat)[3] <- "Glucose"
+            return(dat)
+        }
         df <- read_csv(inFile$datapath, col_types = cols(Date = col_date(format = "%d/%m/%Y")))
         if (file.exists("./data/old_data.Rdata")) {
             load("data/old_data.Rdata")
@@ -67,31 +67,22 @@ server <- function(input, output) {
         #df <- df[duplicated(df), ]
         return(df)
     })
-    # new_measurement <- reactive({
-    #     new_data <- data.frame(Date = input$m_date, Time = NA,
-    #                            Glucose = as.numeric(input$glucose), Period =  input$time,Note = NA)
-    #     print(new_data)
-    #     return(new_data)
-    #     })
-    # dat <- eventReactive(input$go, {
-    #     print(filedata())
-    #     dt <- rbind.data.frame(filedata(), new_measurement())
-    #     #dt <- dt[duplicated(dt),]
-    #     #print(dt[(nrow(dt)-3):nrow(dt),])
-    #     print(dt)
-    #     saveData(dt)
-    #     return(dt)
-    # })
-    # dat <- reactive({ 
-    #     if (is.null(new_measurement())) {
-    #         return(filedata())
-    #     }
-    #     return(rbind.data.frame(filedata(), new_measurement()))
-    #     })
-    observeEvent(input$go, {
-        saveData(filedata())
+    new_measurement <- reactive({
+        new_data <- data.frame(Date = input$m_date, Time = NA,
+                               Glucose = as.numeric(input$glucose), Period =  input$time,Note = NA)
+        return(new_data)
     })
-    output$date <- renderPrint({ input$date})
+
+    dat <- reactive({
+        if (is.na(new_measurement()[['Glucose']])) {
+            return(filedata())
+        }
+        return(rbind.data.frame(filedata(), new_measurement()))
+    })
+    observeEvent(input$go, {
+        saveData(dat())
+    })
+    output$date <- renderTable({ tail(dat(), 10)})
     
     output$glucose_graph <- renderPlot({
         input$go
@@ -105,8 +96,9 @@ server <- function(input, output) {
             facet_wrap(~Period, scales = "free") })
     output$statistics <- renderTable({
         input$go
-        dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))        colnames(data)[3] <- "Glucose"
-        data %>%
+        dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))        
+        colnames(dat)[3] <- "Glucose"
+        dat %>%
             group_by(Period) %>%
             filter(Date >= input$date[1] & Date <= input$date[2]) %>%
             summarise(count = n(), mean = mean(Glucose),
