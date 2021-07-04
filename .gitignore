@@ -5,4 +5,4 @@
 *.Rdata
 devs.R
 /*.csv
-!data/gitkeep
+data/old_data.csv
