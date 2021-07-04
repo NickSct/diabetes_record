@@ -2,6 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-*.csv
+.csv
 *.Rdata
 devs.R
+data/*
