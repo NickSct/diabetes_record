@@ -1,0 +1,118 @@
+
+library(shiny)
+library(readr)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+
+saveData <- function(data) {
+    unlink("./data/*")
+    write.csv(data,file = "data/old_data.csv", row.names = FALSE)
+    #save(data, file = "data/old_data.Rdata")
+}
+
+loadData <- function() {
+    return(load("data/old_data.Rdata"))
+}
+
+#  if (file.exists("./data/old_data.Rdata")) {
+#      load("data/old_data.Rdata")
+# }
+# colnames(old_data)[3] <- "Glucose"
+
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+    # Application title
+    titlePanel("Diabetes Measurements"),
+    
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout( 
+        sidebarPanel(
+            fileInput("file", "Upload measurements", multiple = TRUE),
+            dateRangeInput(inputId = "date", "Range of data",
+                           start = "2020-03-14",end = "2020-09-10"),
+            h3("New measurement"),
+            dateInput(inputId = "m_date", 
+                      label = "Date measurement taken", value = Sys.Date()),
+            textInput("glucose", label = "Glucose"),
+            selectInput("units", "units", choices = c("mg/dl", "mmoles/lt")),
+            selectInput("time", "Time", choices = c("Before Breakfast", "After Breakfast","Before Lunch", "After Lunch", 
+                                                    "Before Dinner", "After Dinner", "Before Sleep")),
+            actionButton("go", "Add measurement")
+        ),
+        mainPanel( 
+            verbatimTextOutput("date"),
+            plotOutput("glucose_graph"),
+            tableOutput("statistics")
+        ))
+    
+)
+
+server <- function(input, output) {
+    filedata <- reactive({
+        inFile <- input$file 
+        # if (is.null(inFile) & file.exists("./data/old_data.Rdata")) {
+        #     load("data/old_data.Rdata")
+        #     colnames(data)[3] <- "Glucose"
+        #     return(data)
+        # }
+        df <- read_csv(inFile$datapath, col_types = cols(Date = col_date(format = "%d/%m/%Y")))
+        if (file.exists("./data/old_data.Rdata")) {
+            load("data/old_data.Rdata")
+            df <- rbind(data, df)
+            colnames(data)[3] <- "Glucose"
+        }
+        colnames(df)[3] <- "Glucose"
+        #df <- df[duplicated(df), ]
+        return(df)
+    })
+    # new_measurement <- reactive({
+    #     new_data <- data.frame(Date = input$m_date, Time = NA,
+    #                            Glucose = as.numeric(input$glucose), Period =  input$time,Note = NA)
+    #     print(new_data)
+    #     return(new_data)
+    #     })
+    # dat <- eventReactive(input$go, {
+    #     print(filedata())
+    #     dt <- rbind.data.frame(filedata(), new_measurement())
+    #     #dt <- dt[duplicated(dt),]
+    #     #print(dt[(nrow(dt)-3):nrow(dt),])
+    #     print(dt)
+    #     saveData(dt)
+    #     return(dt)
+    # })
+    # dat <- reactive({ 
+    #     if (is.null(new_measurement())) {
+    #         return(filedata())
+    #     }
+    #     return(rbind.data.frame(filedata(), new_measurement()))
+    #     })
+    observeEvent(input$go, {
+        saveData(filedata())
+    })
+    output$date <- renderPrint({ input$date})
+    
+    output$glucose_graph <- renderPlot({
+        input$go
+        dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))
+        ggplot(data = dat, aes(x = Date, y = Glucose)) +
+            geom_line() +
+            scale_x_date(date_labels = "%Y %b %d",date_breaks = "2 week",
+                         limit = c(input$date[1],input$date[2])) +
+            ylab("Glucose") +
+            theme(axis.text.x=element_text(angle=60, hjust=1)) +
+            facet_wrap(~Period, scales = "free") })
+    output$statistics <- renderTable({
+        input$go
+        dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))        colnames(data)[3] <- "Glucose"
+        data %>%
+            group_by(Period) %>%
+            filter(Date >= input$date[1] & Date <= input$date[2]) %>%
+            summarise(count = n(), mean = mean(Glucose),
+                      median = median(Glucose), std = sd(Glucose))
+    })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
