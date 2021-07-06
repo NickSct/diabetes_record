@@ -6,13 +6,14 @@ library(lubridate)
 library(dplyr)
 
 saveData <- function(data) {
-    unlink("./data/old_data.csv")
+    #unlink("./data/old_data.csv")
     write.csv(data,file = "data/old_data.csv", row.names = FALSE)
     #save(data, file = "data/old_data.Rdata")
 }
 
 loadData <- function() {
-    return(load("data/old_data.Rdata"))
+    dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))
+    return(dat)
 }
 
 #  if (file.exists("./data/old_data.Rdata")) {
@@ -64,7 +65,6 @@ server <- function(input, output) {
             colnames(data)[3] <- "Glucose"
         }
         colnames(df)[3] <- "Glucose"
-        #df <- df[duplicated(df), ]
         return(df)
     })
     new_measurement <- reactive({
@@ -82,7 +82,11 @@ server <- function(input, output) {
     observeEvent(input$go, {
         saveData(dat())
     })
-    output$date <- renderTable({ tail(dat(), 10)})
+    output$date <- renderTable({ 
+        input$go
+        loadData()
+        #tail(dat(), 10)
+        })
     
     output$glucose_graph <- renderPlot({
         input$go
