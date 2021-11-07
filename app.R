@@ -43,9 +43,9 @@ ui <- fluidPage(
             actionButton("go", "Add measurement")
         ),
         mainPanel( 
-            tableOutput("date"),
             plotOutput("glucose_graph"),
-            tableOutput("statistics")
+            tableOutput("statistics"),
+            plotOutput("before_after")
         ))
     
 )
@@ -65,6 +65,7 @@ server <- function(input, output) {
             colnames(data)[3] <- "Glucose"
         }
         colnames(df)[3] <- "Glucose"
+        df <- df[!duplicated(df),]
         return(df)
     })
     new_measurement <- reactive({
@@ -82,15 +83,18 @@ server <- function(input, output) {
     observeEvent(input$go, {
         saveData(dat())
     })
-    output$date <- renderTable({ 
-        input$go
-        loadData()
-        #tail(dat(), 10)
-        })
-    
+    # output$date <- renderTable({ 
+    #     input$go
+    #     loadData()
+    #     #tail(dat(), 10)
+    #     })
+    # 
     output$glucose_graph <- renderPlot({
         input$go
         dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))
+        if (input$date[2] > max(dat[['Date']])) {
+            input$date[2] <- max(dat[['Date']])
+        }
         ggplot(data = dat, aes(x = Date, y = Glucose)) +
             geom_line() +
             scale_x_date(date_labels = "%Y %b %d",date_breaks = "2 week",
@@ -108,7 +112,29 @@ server <- function(input, output) {
             summarise(count = n(), mean = mean(Glucose),
                       median = median(Glucose), std = sd(Glucose))
     })
+    output$before_after <- renderPlot({
+        input$go
+        dat <- read_csv("data/old_data.csv",col_types = cols(Date = col_date(format = "%Y-%m-%d")))
+        if (input$date[2] > max(dat[['Date']])) {
+            input$date[2] <- max(dat[['Date']])
+        }
+        dupls_dates <- as.Date(names(which(table(dat$Date)>1)), format = "%Y-%m-%d")
+        dat_ba <- dat[dat$Date %in% dupls_dates,]
+        dat_ba$session <- ifelse(grepl("Breakfast", dat_ba$Period), "Breakfast",
+                                 ifelse(grepl("Lunch", dat_ba$Period), "Lunch",
+                                        "Dinner"))
+        dat_ba$Period <- ifelse(grepl("After", dat_ba$Period), "2After", "1Before")
+        
+        ggplot(dat_ba, aes(x = Period, y = Glucose)) +
+            geom_point() +
+            geom_line(aes(group = Date)) +
+            scale_x_discrete(breaks=c("1Before","2After"),
+                             labels=c("Before ", "After")) +
+            facet_wrap(~session)    })
 }
 
 # Run the application 
 shinyApp(ui = ui, server = server)
+
+
+
